@@ -1,0 +1,47 @@
+{
+  "name": "@danecodes/roku-odc",
+  "version": "0.1.0",
+  "description": "TypeScript client for Roku On-Device Components (ODC) — registry access, app UI inspection, and file management for sideloaded channels",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run src/__tests__/client-unit.test.ts",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm test && npm run build"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "roku",
+    "odc",
+    "on-device-components",
+    "testing",
+    "automation",
+    "scenegraph",
+    "brightscript",
+    "registry"
+  ],
+  "license": "MIT",
+  "author": "Dane Hesseldahl",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danecodes/roku-odc.git"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.2"
+  }
+}
