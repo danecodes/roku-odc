@@ -7,3 +7,8 @@ export {
   OdcHttpError,
   OdcTimeoutError,
 } from './errors.js';
+
+export {
+  inject,
+  injectDir,
+} from './inject.js';

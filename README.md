@@ -2,9 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Lightweight TypeScript client for Roku [On-Device Components (ODC)](https://github.com/nicholasRutherworksatRoku/odc) — registry access, app UI inspection, and file management for sideloaded channels. Companion library to [@danecodes/roku-ecp](https://www.npmjs.com/package/@danecodes/roku-ecp).
+Lightweight TypeScript client and on-device component for Roku ODC — registry access, app UI inspection, and file management for sideloaded channels. Companion library to [@danecodes/roku-ecp](https://www.npmjs.com/package/@danecodes/roku-ecp).
 
-ODC is an HTTP API on port 8061 that provides runtime access to a dev-sideloaded Roku channel. It requires the ODC component to be included in the sideloaded app.
+ODC is an HTTP API on port 8061 that provides runtime access to a dev-sideloaded Roku channel. This package includes both the TypeScript client and the BrightScript component that runs on the device, with automatic injection into your channel at sideload time.
 
 ## Install
 
@@ -15,8 +15,15 @@ npm install @danecodes/roku-odc
 ## Quick start
 
 ```typescript
-import { OdcClient } from '@danecodes/roku-odc';
+import { inject, OdcClient } from '@danecodes/roku-odc';
+import { readFile } from 'node:fs/promises';
 
+// Inject the ODC component into your channel zip before sideloading
+const channelZip = await readFile('my-channel.zip');
+const injectedZip = await inject(channelZip);
+// Now sideload injectedZip to your Roku (e.g. via roku-ecp's sideload())
+
+// Connect to the running channel's ODC server
 const odc = new OdcClient('192.168.0.30');
 
 // Read the channel's registry
@@ -32,14 +39,71 @@ await odc.setRegistry({
 // Clear specific sections
 await odc.clearRegistry(['cache', 'temp']);
 
-// Clear all registry
-await odc.clearRegistry();
-
 // Inspect the app UI tree
 const ui = await odc.getAppUi();
 ```
 
-## API
+## Injection
+
+The ODC component must be running inside your channel for the client to connect. This package provides two ways to inject it:
+
+### `inject(zip): Promise<Buffer>`
+
+Inject into a channel zip buffer. Returns a new zip with the ODC component added.
+
+```typescript
+import { inject } from '@danecodes/roku-odc';
+
+const original = await readFile('my-channel.zip');
+const injected = await inject(original);
+await writeFile('my-channel-odc.zip', injected);
+```
+
+This:
+- Adds the BrightScript ODC server component to `components/roku-odc/`
+- Adds the launch hook to `source/roku-odc/`
+- Patches your entry point (`Main` or `RunUserInterface`) to initialize ODC at launch
+- Patches your Scene component to load the ODC server
+- Creates the ODC task node after `screen.show()`
+
+### `injectDir(dir): Promise<void>`
+
+Inject directly into a channel directory on disk. Useful during development.
+
+```typescript
+import { injectDir } from '@danecodes/roku-odc';
+
+await injectDir('./my-channel');
+```
+
+### Launch configuration
+
+Once injected, the ODC component supports launch-time configuration via ECP launch params:
+
+```typescript
+import { EcpClient } from '@danecodes/roku-ecp';
+
+const ecp = new EcpClient('192.168.0.30');
+
+// Launch with pre-loaded registry state
+await ecp.launch('dev', {
+  odc_registry: JSON.stringify({ auth: { token: 'test' } }),
+});
+
+// Clear registry on launch
+await ecp.launch('dev', { odc_clear_registry: 'true' });
+
+// Pass channel data (deeplink-like params)
+await ecp.launch('dev', {
+  odc_channel_data: JSON.stringify({ contentId: 'abc' }),
+});
+
+// Launch to a specific entry point
+await ecp.launch('dev', { odc_entry_point: 'screensaver' });
+// Options: 'channel', 'screensaver', 'screensaver-settings'
+```
+
+## Client API
 
 ### `new OdcClient(ip, options?)`
 
@@ -86,7 +150,7 @@ await odc.clearRegistry();
 
 #### `getAppUi(fields?): Promise<string>`
 
-Get the current app UI tree. Optionally filter to specific fields per component type.
+Get the current app UI tree as XML. Optionally filter to specific fields per component type.
 
 ```typescript
 const ui = await odc.getAppUi();
@@ -143,7 +207,8 @@ try {
 ## Requirements
 
 - Node.js >= 22
-- A Roku device on the same network with a dev-sideloaded channel that includes the ODC component
+- A Roku device on the same network
+- The channel must be dev-sideloaded with the ODC component injected (via `inject()` or `injectDir()`)
 - Network access to the device on port 8061
 
 ## License
