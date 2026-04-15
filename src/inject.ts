@@ -18,9 +18,6 @@ export async function inject(zip: Buffer): Promise<Buffer> {
   // Patch source .brs files to hook ODC into the channel
   patchSourceFiles(entries);
 
-  // Patch scene component XMLs to expose app-ui callFunc
-  patchSceneXmls(entries);
-
   // Add ODC component files
   for (const [path, content] of Object.entries(COMPONENT_FILES)) {
     entries.set(path, Buffer.from(content, 'utf-8'));
@@ -40,7 +37,6 @@ export async function injectDir(dir: string): Promise<void> {
 
   // Patch source files
   patchSourceFiles(entries);
-  patchSceneXmls(entries);
 
   // Write patched files back
   for (const [path, content] of entries) {
@@ -86,26 +82,6 @@ function patchSourceFiles(entries: Map<string, Buffer>): void {
 
     if (changed) {
       entries.set(path, Buffer.from(source, 'utf-8'));
-    }
-  }
-}
-
-function patchSceneXmls(entries: Map<string, Buffer>): void {
-  const scenePattern = /<component(\s+|\s+.*?\s+)extends\s*=\s*"(Base)?Scene"/i;
-  const endComponentPattern = /(<\/component>)/i;
-
-  for (const [path, content] of entries) {
-    if (!/^components\/.*\.xml$/i.test(path)) continue;
-
-    const xml = content.toString('utf-8');
-    if (!scenePattern.test(xml)) continue;
-
-    // Add the ODC server BRS as a script dependency on the scene
-    const scriptTag = '<script type="text/brightscript" uri="pkg:/components/roku-odc/RokuODC.brs" />';
-    const patched = xml.replace(endComponentPattern, `${scriptTag}\n$1`);
-
-    if (patched !== xml) {
-      entries.set(path, Buffer.from(patched, 'utf-8'));
     }
   }
 }

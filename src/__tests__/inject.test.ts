@@ -171,7 +171,7 @@ end sub
     expect(mainBrs).toContain('createObject("roSGNode", "RokuODC")');
   });
 
-  it('patches scene XML with script reference', async () => {
+  it('does not modify scene or other component XMLs', async () => {
     const input = await createTestZip({
       'manifest': 'title=Test\n',
       'source/main.brs': MAIN_BRS,
@@ -180,28 +180,8 @@ end sub
 
     const output = await inject(input);
     const entries = await readZip(output);
-    const sceneXml = entries.get('components/MainScene.xml')!;
 
-    expect(sceneXml).toContain('roku-odc/RokuODC.brs');
-  });
-
-  it('does not patch non-Scene components', async () => {
-    const widgetXml = `<?xml version="1.0" encoding="utf-8" ?>
-<component name="MyWidget" extends="Group">
-  <script type="text/brightscript" uri="MyWidget.brs" />
-</component>
-`;
-    const input = await createTestZip({
-      'manifest': 'title=Test\n',
-      'source/main.brs': MAIN_BRS,
-      'components/MainScene.xml': SCENE_XML,
-      'components/MyWidget.xml': widgetXml,
-    });
-
-    const output = await inject(input);
-    const entries = await readZip(output);
-
-    expect(entries.get('components/MyWidget.xml')).toBe(widgetXml);
+    expect(entries.get('components/MainScene.xml')).toBe(SCENE_XML);
   });
 });
 
@@ -243,10 +223,10 @@ describe('injectDir', () => {
     expect(mainBrs).toContain('createObject("roSGNode", "RokuODC")');
   });
 
-  it('patches scene XML', async () => {
+  it('does not modify scene XML', async () => {
     await injectDir(tmpDir);
 
     const sceneXml = await readFile(join(tmpDir, 'components/MainScene.xml'), 'utf-8');
-    expect(sceneXml).toContain('roku-odc/RokuODC.brs');
+    expect(sceneXml).toBe(SCENE_XML);
   });
 });
