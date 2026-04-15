@@ -8,6 +8,7 @@ export const SERVER_XML = `<?xml version="1.0" encoding="utf-8" ?>
   <interface>
     <field id="port" type="integer" value="8061" />
   </interface>
+  <script type="text/brightscript" uri="RokuODC.brs" />
 </component>
 `;
 
