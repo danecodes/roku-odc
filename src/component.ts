@@ -282,6 +282,17 @@ function odcRouteRequest(method as string, path as string, query as object, head
       if method = "DELETE" then return odcDeleteRegistry()
     else if path = "/app-ui"
       if method = "GET" then return odcGetAppUi(query)
+    else if path = "/field"
+      if method = "GET" then return odcGetField(query)
+      if method = "PATCH" then return odcSetField(body)
+    else if path = "/callFunc"
+      if method = "POST" then return odcCallFunc(body)
+    else if path = "/findNodes"
+      if method = "POST" then return odcFindNodes(body)
+    else if path = "/focusedNode"
+      if method = "GET" then return odcGetFocusedNode()
+    else if path = "/observe"
+      if method = "POST" then return odcObserveField(body)
     else if path = "/files"
       if method = "GET" then return odcGetFiles(query)
     else if path = "/file"
@@ -412,6 +423,249 @@ sub odcBuildXmlTree(parent as object, node as object, fields as object)
     end if
   end for
 end sub
+
+' ---------- Node primitives ----------
+
+function odcFindNodeById(root as object, id as string) as object
+  if root = invalid then return invalid
+  if root.id = id then return root
+  for i = 0 to root.getChildCount() - 1
+    result = odcFindNodeById(root.getChild(i), id)
+    if result <> invalid then return result
+  end for
+  return invalid
+end function
+
+function odcSerializeValue(value as dynamic) as dynamic
+  if value = invalid then return invalid
+  valType = type(value)
+  if valType = "roSGNode"
+    return { __nodeRef: true, id: value.id, subtype: value.subtype() }
+  else if valType = "roArray"
+    result = []
+    for each item in value
+      result.push(odcSerializeValue(item))
+    end for
+    return result
+  else if valType = "roAssociativeArray"
+    result = {}
+    for each key in value
+      result[key] = odcSerializeValue(value[key])
+    end for
+    return result
+  end if
+  return value
+end function
+
+function odcNodeToInfo(node as object) as object
+  info = { id: node.id, subtype: node.subtype(), fields: {} }
+  for each key in node.keys()
+    fieldType = node.getFieldType(key)
+    if fieldType <> "node" and fieldType <> "nodearray" and fieldType <> "function"
+      info.fields[key] = odcSerializeValue(node.getField(key))
+    end if
+  end for
+  return info
+end function
+
+function odcErrorResponse(status as integer, statusText as string, msg as string) as object
+  return { status: status, statusText: statusText, contentType: "application/json", body: formatJson({ message: msg }), bodyBytes: invalid }
+end function
+
+function odcOkResponse(data as object) as object
+  return { status: 200, statusText: "OK", contentType: "application/json", body: formatJson(data), bodyBytes: invalid }
+end function
+
+' -- getField / setField --
+
+function odcGetField(query as object) as object
+  if not query.doesExist("nodeId") or not query.doesExist("field")
+    return odcErrorResponse(400, "Bad Request", "missing nodeId or field param")
+  end if
+
+  node = odcFindNodeById(m.top.getScene(), query.nodeId)
+  if node = invalid
+    return odcErrorResponse(404, "Not Found", "node not found: " + query.nodeId)
+  end if
+
+  if not node.doesExist(query.field)
+    return odcErrorResponse(404, "Not Found", "field not found: " + query.field)
+  end if
+
+  value = node.getField(query.field)
+  return odcOkResponse({ value: odcSerializeValue(value) })
+end function
+
+function odcSetField(body as string) as object
+  data = parseJson(body)
+  if data = invalid or not data.doesExist("nodeId") or not data.doesExist("field")
+    return odcErrorResponse(400, "Bad Request", "missing nodeId, field, or value")
+  end if
+
+  node = odcFindNodeById(m.top.getScene(), data.nodeId)
+  if node = invalid
+    return odcErrorResponse(404, "Not Found", "node not found: " + data.nodeId)
+  end if
+
+  node.setField(data.field, data.value)
+  return { status: 204, statusText: "No Content", contentType: "text/plain", body: "", bodyBytes: invalid }
+end function
+
+' -- callFunc --
+
+function odcCallFunc(body as string) as object
+  data = parseJson(body)
+  if data = invalid or not data.doesExist("nodeId") or not data.doesExist("func")
+    return odcErrorResponse(400, "Bad Request", "missing nodeId or func")
+  end if
+
+  node = odcFindNodeById(m.top.getScene(), data.nodeId)
+  if node = invalid
+    return odcErrorResponse(404, "Not Found", "node not found: " + data.nodeId)
+  end if
+
+  params = []
+  if data.doesExist("params") then params = data.params
+
+  result = invalid
+  count = params.count()
+  if count = 0
+    result = node.callFunc(data.func)
+  else if count = 1
+    result = node.callFunc(data.func, params[0])
+  else if count = 2
+    result = node.callFunc(data.func, params[0], params[1])
+  else if count = 3
+    result = node.callFunc(data.func, params[0], params[1], params[2])
+  else if count = 4
+    result = node.callFunc(data.func, params[0], params[1], params[2], params[3])
+  else if count = 5
+    result = node.callFunc(data.func, params[0], params[1], params[2], params[3], params[4])
+  end if
+
+  return odcOkResponse({ result: odcSerializeValue(result) })
+end function
+
+' -- findNodes --
+
+function odcFindNodes(body as string) as object
+  data = parseJson(body)
+  if data = invalid or not data.doesExist("filters")
+    return odcErrorResponse(400, "Bad Request", "missing filters")
+  end if
+
+  results = []
+  odcSearchNodes(m.top.getScene(), data.filters, results)
+  return odcOkResponse(results)
+end function
+
+sub odcSearchNodes(node as object, filters as object, results as object)
+  if odcNodeMatchesFilters(node, filters)
+    results.push(odcNodeToInfo(node))
+  end if
+
+  for i = 0 to node.getChildCount() - 1
+    odcSearchNodes(node.getChild(i), filters, results)
+  end for
+end sub
+
+function odcNodeMatchesFilters(node as object, filters as object) as boolean
+  for each key in filters
+    if key = "subtype"
+      if node.subtype() <> filters.subtype then return false
+    else
+      if not node.doesExist(key) then return false
+      val = node.getField(key)
+      if type(val) = "roSGNode" then return false
+      if odcToString(val) <> odcToString(filters[key]) then return false
+    end if
+  end for
+  return true
+end function
+
+' -- getFocusedNode --
+
+function odcGetFocusedNode() as object
+  scene = m.top.getScene()
+  if scene = invalid
+    return odcOkResponse({ node: invalid })
+  end if
+
+  focused = odcTraverseFocus(scene)
+  if focused = invalid
+    return odcOkResponse({ node: invalid })
+  end if
+
+  return odcOkResponse({ node: odcNodeToInfo(focused) })
+end function
+
+function odcTraverseFocus(node as object) as object
+  if node.hasFocus() then return node
+  child = node.focusedChild
+  if child <> invalid and not child.isSameNode(node)
+    return odcTraverseFocus(child)
+  end if
+  return invalid
+end function
+
+' -- observeField --
+' Note: blocks the ODC server for up to timeout ms. No other
+' ODC requests can be processed during an active observation.
+
+function odcObserveField(body as string) as object
+  data = parseJson(body)
+  if data = invalid or not data.doesExist("nodeId") or not data.doesExist("field")
+    return odcErrorResponse(400, "Bad Request", "missing nodeId or field")
+  end if
+
+  node = odcFindNodeById(m.top.getScene(), data.nodeId)
+  if node = invalid
+    return odcErrorResponse(404, "Not Found", "node not found: " + data.nodeId)
+  end if
+
+  if not node.doesExist(data.field)
+    return odcErrorResponse(400, "Bad Request", "field not found: " + data.field)
+  end if
+
+  hasMatch = data.doesExist("match")
+
+  ' Check if already matches
+  currentValue = node.getField(data.field)
+  if hasMatch and odcToString(currentValue) = odcToString(data.match)
+    return odcOkResponse({ value: odcSerializeValue(currentValue), matched: true })
+  end if
+
+  timeout = 10000
+  if data.doesExist("timeout") then timeout = data.timeout
+
+  ' Observe and wait
+  observePort = createObject("roMessagePort")
+  node.observeFieldScoped(data.field, observePort)
+
+  timer = createObject("roTimespan")
+  while true
+    remaining = timeout - timer.totalMilliseconds()
+    if remaining <= 0 then exit while
+
+    event = wait(remaining, observePort)
+    if event = invalid then exit while
+
+    if type(event) = "roSGNodeEvent"
+      newValue = event.getData()
+      if not hasMatch
+        node.unobserveFieldScoped(data.field)
+        return odcOkResponse({ value: odcSerializeValue(newValue), matched: true })
+      else if odcToString(newValue) = odcToString(data.match)
+        node.unobserveFieldScoped(data.field)
+        return odcOkResponse({ value: odcSerializeValue(newValue), matched: true })
+      end if
+    end if
+  end while
+
+  node.unobserveFieldScoped(data.field)
+  finalValue = node.getField(data.field)
+  return odcOkResponse({ value: odcSerializeValue(finalValue), matched: false })
+end function
 
 ' ---------- File handlers ----------
 

@@ -1,6 +1,9 @@
 export {
   OdcClient,
   type OdcClientOptions,
+  type NodeInfo,
+  type ObserveOptions,
+  type ObserveResult,
 } from './client.js';
 
 export {

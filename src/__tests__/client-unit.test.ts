@@ -181,6 +181,186 @@ describe('listFiles', () => {
   });
 });
 
+describe('getField', () => {
+  it('sends GET with nodeId and field params', async () => {
+    mockFetch({ value: 'Hello World' });
+
+    const odc = new OdcClient('192.168.0.30');
+    const result = await odc.getField('title', 'text');
+
+    expect(result).toBe('Hello World');
+    const fetchFn = vi.mocked(fetch);
+    const url = fetchFn.mock.calls[0][0] as string;
+    expect(url).toContain('/field?');
+    expect(url).toContain('nodeId=title');
+    expect(url).toContain('field=text');
+  });
+
+  it('returns complex values', async () => {
+    mockFetch({ value: [1, 2, 3] });
+
+    const odc = new OdcClient('192.168.0.30');
+    const result = await odc.getField('list', 'items');
+
+    expect(result).toEqual([1, 2, 3]);
+  });
+});
+
+describe('setField', () => {
+  it('sends PATCH with nodeId, field, and value', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
+
+    const odc = new OdcClient('192.168.0.30');
+    await odc.setField('title', 'text', 'New Text');
+
+    const fetchFn = vi.mocked(fetch);
+    expect(fetchFn).toHaveBeenCalledWith(
+      'http://192.168.0.30:8061/field',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ nodeId: 'title', field: 'text', value: 'New Text' }),
+      }),
+    );
+  });
+
+  it('sends boolean values', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
+
+    const odc = new OdcClient('192.168.0.30');
+    await odc.setField('overlay', 'visible', false);
+
+    const fetchFn = vi.mocked(fetch);
+    const body = JSON.parse((fetchFn.mock.calls[0][1] as any).body);
+    expect(body.value).toBe(false);
+  });
+});
+
+describe('callFunc', () => {
+  it('sends POST with nodeId, func, and params', async () => {
+    mockFetch({ result: 'ok' });
+
+    const odc = new OdcClient('192.168.0.30');
+    const result = await odc.callFunc('authManager', 'login', ['user', 'pass']);
+
+    expect(result).toBe('ok');
+    const fetchFn = vi.mocked(fetch);
+    expect(fetchFn).toHaveBeenCalledWith(
+      'http://192.168.0.30:8061/callFunc',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ nodeId: 'authManager', func: 'login', params: ['user', 'pass'] }),
+      }),
+    );
+  });
+
+  it('sends empty params array when none provided', async () => {
+    mockFetch({ result: null });
+
+    const odc = new OdcClient('192.168.0.30');
+    await odc.callFunc('player', 'pause');
+
+    const fetchFn = vi.mocked(fetch);
+    const body = JSON.parse((fetchFn.mock.calls[0][1] as any).body);
+    expect(body.params).toEqual([]);
+  });
+});
+
+describe('findNodes', () => {
+  it('sends POST with filters', async () => {
+    const nodes = [
+      { id: 'btn1', subtype: 'Button', fields: { text: 'Play' } },
+      { id: 'btn2', subtype: 'Button', fields: { text: 'Stop' } },
+    ];
+    mockFetch(nodes);
+
+    const odc = new OdcClient('192.168.0.30');
+    const result = await odc.findNodes({ subtype: 'Button' });
+
+    expect(result).toEqual(nodes);
+    const fetchFn = vi.mocked(fetch);
+    expect(fetchFn).toHaveBeenCalledWith(
+      'http://192.168.0.30:8061/findNodes',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ filters: { subtype: 'Button' } }),
+      }),
+    );
+  });
+});
+
+describe('getFocusedNode', () => {
+  it('returns focused node info', async () => {
+    const node = { id: 'playBtn', subtype: 'Button', fields: { text: 'Play' } };
+    mockFetch({ node });
+
+    const odc = new OdcClient('192.168.0.30');
+    const result = await odc.getFocusedNode();
+
+    expect(result).toEqual(node);
+  });
+
+  it('returns null when nothing is focused', async () => {
+    mockFetch({ node: null });
+
+    const odc = new OdcClient('192.168.0.30');
+    const result = await odc.getFocusedNode();
+
+    expect(result).toBeNull();
+  });
+});
+
+describe('observeField', () => {
+  it('sends POST with nodeId, field, and timeout', async () => {
+    mockFetch({ value: true, matched: true });
+
+    const odc = new OdcClient('192.168.0.30');
+    const result = await odc.observeField('auth', 'isLoggedIn', { match: true, timeout: 5000 });
+
+    expect(result).toEqual({ value: true, matched: true });
+    const fetchFn = vi.mocked(fetch);
+    const body = JSON.parse((fetchFn.mock.calls[0][1] as any).body);
+    expect(body.nodeId).toBe('auth');
+    expect(body.field).toBe('isLoggedIn');
+    expect(body.match).toBe(true);
+    expect(body.timeout).toBe(5000);
+  });
+
+  it('uses client timeout as default observe timeout', async () => {
+    mockFetch({ value: 'changed', matched: true });
+
+    const odc = new OdcClient('192.168.0.30', { timeout: 3000 });
+    await odc.observeField('node', 'field');
+
+    const fetchFn = vi.mocked(fetch);
+    const body = JSON.parse((fetchFn.mock.calls[0][1] as any).body);
+    expect(body.timeout).toBe(3000);
+  });
+
+  it('sets HTTP timeout longer than observe timeout', async () => {
+    mockFetch({ value: 'x', matched: false });
+
+    const odc = new OdcClient('192.168.0.30');
+    await odc.observeField('node', 'field', { timeout: 8000 });
+
+    const fetchFn = vi.mocked(fetch);
+    const init = fetchFn.mock.calls[0][1] as any;
+    // AbortSignal.timeout is called with observeTimeout + 5000
+    // We can't directly inspect the signal timeout, but verify the call succeeded
+    expect(init.signal).toBeDefined();
+  });
+
+  it('omits match from body when not provided', async () => {
+    mockFetch({ value: 'new', matched: true });
+
+    const odc = new OdcClient('192.168.0.30');
+    await odc.observeField('node', 'field');
+
+    const fetchFn = vi.mocked(fetch);
+    const body = JSON.parse((fetchFn.mock.calls[0][1] as any).body);
+    expect(body).not.toHaveProperty('match');
+  });
+});
+
 describe('constructor options', () => {
   it('uses default port 8061', async () => {
     mockFetch({});

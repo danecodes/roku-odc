@@ -1,6 +1,5 @@
 import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import { Readable } from 'node:stream';
 import { COMPONENT_FILES } from './component.js';
 
 /**
