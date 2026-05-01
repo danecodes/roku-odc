@@ -66,7 +66,19 @@ const registry = await odc.getRegistry();
 
 ## Injection
 
-The ODC component must be running inside your channel for the client to connect. This package provides two ways to inject it:
+The ODC component must be running inside your channel for the client to connect.
+
+### CLI
+
+The fastest way — no code needed:
+
+```bash
+# Inject into a zip
+npx @danecodes/roku-odc inject build.zip
+
+# Inject into a directory
+npx @danecodes/roku-odc inject ./my-channel
+```
 
 ### `inject(zip): Promise<Buffer>`
 

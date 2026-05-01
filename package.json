@@ -1,6 +1,6 @@
 {
   "name": "@danecodes/roku-odc",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "TypeScript client for Roku On-Device Components (ODC) — registry access, app UI inspection, and file management for sideloaded channels",
   "type": "module",
   "exports": {
@@ -8,6 +8,9 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "bin": {
+    "roku-odc": "./dist/cli.js"
   },
   "engines": {
     "node": ">=22"
