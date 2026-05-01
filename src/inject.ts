@@ -6,6 +6,10 @@ import { COMPONENT_FILES } from './component.js';
  * Inject the ODC component into a channel zip buffer.
  * Returns a new zip with the ODC BrightScript files added and
  * the channel's entry point patched to start the ODC server.
+ *
+ * **Important:** This operates on zip archives only, not squashfs.
+ * If your build pipeline produces a `.squashfs` file, inject into the
+ * source zip *before* the squashfs conversion step.
  */
 export async function inject(zip: Buffer): Promise<Buffer> {
   // Dynamic imports to keep them optional for users who only use the client
@@ -28,6 +32,10 @@ export async function inject(zip: Buffer): Promise<Buffer> {
 /**
  * Inject the ODC component into a channel directory on disk.
  * Writes the ODC BrightScript files and patches the channel's entry point.
+ *
+ * This is the recommended approach when your build produces a directory
+ * (e.g. `out/` or `build/`) before zipping or squashfs packaging —
+ * inject here, then package as normal.
  */
 export async function injectDir(dir: string): Promise<void> {
   // Read existing source files

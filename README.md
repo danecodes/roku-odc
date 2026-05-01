@@ -88,12 +88,28 @@ This:
 
 ### `injectDir(dir): Promise<void>`
 
-Inject directly into a channel directory on disk. Useful during development.
+Inject directly into a channel directory on disk. Useful during development, and the recommended approach when your build produces a directory before packaging.
 
 ```typescript
 import { injectDir } from '@danecodes/roku-odc';
 
 await injectDir('./my-channel');
+```
+
+### Squashfs builds
+
+Both `inject()` and `injectDir()` operate on zip archives and directories — not squashfs. If your build pipeline produces a `.squashfs` file, inject *before* the squashfs conversion:
+
+```typescript
+// Option A: inject into the build directory, then package
+await injectDir('./build');
+// then run your squashfs/zip step as normal
+
+// Option B: inject into the zip before squashfs conversion
+const zip = await readFile('build.zip');
+const injected = await inject(zip);
+await writeFile('build.zip', injected);
+// then convert to squashfs
 ```
 
 ### Launch configuration
