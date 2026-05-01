@@ -18,13 +18,17 @@ if (command === 'inject') {
   const fullPath = resolve(target);
   const info = await stat(fullPath);
 
+  let output: Buffer;
+
   if (info.isDirectory()) {
-    await injectDir(fullPath);
-    console.log(`Injected ODC into ${fullPath}`);
+    output = await injectDir(fullPath);
+    const outPath = fullPath.replace(/\/$/, '') + '.zip';
+    await writeFile(outPath, output);
+    console.log(`Injected ODC: ${fullPath} → ${outPath}`);
   } else {
     const zip = await readFile(fullPath);
-    const injected = await inject(zip);
-    await writeFile(fullPath, injected);
+    output = await inject(zip);
+    await writeFile(fullPath, output);
     console.log(`Injected ODC into ${fullPath}`);
   }
 } else {

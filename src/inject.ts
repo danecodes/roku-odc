@@ -1,4 +1,4 @@
-import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { COMPONENT_FILES } from './component.js';
 
@@ -30,33 +30,25 @@ export async function inject(zip: Buffer): Promise<Buffer> {
 }
 
 /**
- * Inject the ODC component into a channel directory on disk.
- * Writes the ODC BrightScript files and patches the channel's entry point.
+ * Inject the ODC component into a channel directory and return a zip buffer.
+ * Reads the directory, injects ODC files, patches the entry point, and
+ * returns the whole thing as a ready-to-sideload zip.
  *
- * This is the recommended approach when your build produces a directory
- * (e.g. `out/` or `build/`) before zipping or squashfs packaging —
- * inject here, then package as normal.
+ * Does not modify the source directory.
  */
-export async function injectDir(dir: string): Promise<void> {
-  // Read existing source files
+export async function injectDir(dir: string): Promise<Buffer> {
+  const { ZipFile } = await import('yazl');
+
   const entries = new Map<string, Buffer>();
   await readDirRecursive(dir, dir, entries);
 
-  // Patch source files
   patchSourceFiles(entries);
 
-  // Write patched files back
-  for (const [path, content] of entries) {
-    const fullPath = join(dir, path);
-    await writeFile(fullPath, content);
+  for (const [path, content] of Object.entries(COMPONENT_FILES)) {
+    entries.set(path, Buffer.from(content, 'utf-8'));
   }
 
-  // Write ODC component files
-  for (const [path, content] of Object.entries(COMPONENT_FILES)) {
-    const fullPath = join(dir, path);
-    await mkdir(join(fullPath, '..'), { recursive: true });
-    await writeFile(fullPath, content);
-  }
+  return createZip(ZipFile, entries);
 }
 
 // ---- Entry point patching ----

@@ -203,30 +203,36 @@ describe('injectDir', () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  it('writes ODC component files', async () => {
-    await injectDir(tmpDir);
+  it('returns a zip buffer with ODC component files', async () => {
+    const zip = await injectDir(tmpDir);
+    const entries = await readZip(zip);
 
-    const xml = await readFile(join(tmpDir, 'components/roku-odc/RokuODC.xml'), 'utf-8');
-    const brs = await readFile(join(tmpDir, 'components/roku-odc/RokuODC.brs'), 'utf-8');
-    const mainOdc = await readFile(join(tmpDir, 'source/roku-odc/odcMain.brs'), 'utf-8');
-
-    expect(xml).toContain('RokuODC');
-    expect(brs).toContain('odcStartServer');
-    expect(mainOdc).toContain('odcMain');
+    expect(entries.has('components/roku-odc/RokuODC.xml')).toBe(true);
+    expect(entries.has('components/roku-odc/RokuODC.brs')).toBe(true);
+    expect(entries.has('source/roku-odc/odcMain.brs')).toBe(true);
+    expect(entries.get('components/roku-odc/RokuODC.brs')).toContain('odcStartServer');
   });
 
-  it('patches source/main.brs', async () => {
-    await injectDir(tmpDir);
+  it('patches source/main.brs in the returned zip', async () => {
+    const zip = await injectDir(tmpDir);
+    const entries = await readZip(zip);
+    const mainBrs = entries.get('source/main.brs')!;
 
-    const mainBrs = await readFile(join(tmpDir, 'source/main.brs'), 'utf-8');
     expect(mainBrs).toContain('odcMain(args)');
     expect(mainBrs).toContain('createObject("roSGNode", "RokuODC")');
   });
 
-  it('does not modify scene XML', async () => {
+  it('does not modify the source directory', async () => {
     await injectDir(tmpDir);
 
-    const sceneXml = await readFile(join(tmpDir, 'components/MainScene.xml'), 'utf-8');
-    expect(sceneXml).toBe(SCENE_XML);
+    const mainBrs = await readFile(join(tmpDir, 'source/main.brs'), 'utf-8');
+    expect(mainBrs).toBe(MAIN_BRS);
+  });
+
+  it('does not modify scene XML in the returned zip', async () => {
+    const zip = await injectDir(tmpDir);
+    const entries = await readZip(zip);
+
+    expect(entries.get('components/MainScene.xml')).toBe(SCENE_XML);
   });
 });

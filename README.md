@@ -98,29 +98,25 @@ This:
 - Patches your entry point (`Main` or `RunUserInterface`) to initialize ODC at launch
 - Creates the ODC task node after `screen.show()`
 
-### `injectDir(dir): Promise<void>`
+### `injectDir(dir): Promise<Buffer>`
 
-Inject directly into a channel directory on disk. Useful during development, and the recommended approach when your build produces a directory before packaging.
+Read a channel directory, inject ODC, and return a ready-to-sideload zip buffer. Does not modify the source directory.
 
 ```typescript
 import { injectDir } from '@danecodes/roku-odc';
 
-await injectDir('./my-channel');
+const zip = await injectDir('./my-channel');
+await writeFile('my-channel.zip', zip);
+// or pass directly to roku-ecp's sideload()
 ```
 
 ### Squashfs builds
 
-Both `inject()` and `injectDir()` operate on zip archives and directories — not squashfs. If your build pipeline produces a `.squashfs` file, inject *before* the squashfs conversion:
+Both functions return zip buffers. If your pipeline needs squashfs, inject first, then convert:
 
 ```typescript
-// Option A: inject into the build directory, then package
-await injectDir('./build');
-// then run your squashfs/zip step as normal
-
-// Option B: inject into the zip before squashfs conversion
-const zip = await readFile('build.zip');
-const injected = await inject(zip);
-await writeFile('build.zip', injected);
+const zip = await injectDir('./build');
+await writeFile('build.zip', zip);
 // then convert to squashfs
 ```
 
